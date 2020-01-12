@@ -1,87 +1,78 @@
+#SingleInstance force
 #NoEnv
-#Persistent
-#SingleInstance
+#Warn
+SendMode Input
+SetWorkingDir %A_ScriptDir%
+~#j::Reload
 
-; ----- Auto-execute section ---------------------------------------
 
-;Menu, Tray, Icon, shell32.dll, 13
-Menu, Tray, Icon, CtrlOpen.ico
-Menu, Tray, Tip, CtrlOpen
-Menu, Tray, NoStandard
-Menu, Tray, Add, Edit CtrlOpen.ini, EditIni
-Menu, Tray, Add
-Menu, Tray, Default, Edit CtrlOpen.ini
-Menu, Tray, Standard
 
-global MyIniPath
-MyIniPath = %A_ScriptDir%\CtrlOpen.ini
+#If ""
+	. "" || WinActive("ahk_class #32770") && focusedControl() == "DirectUIHWND2" || ""
+	. "" || WinActive("ahk_class EVERYTHING") && focusedControl() == "SysListView321"
++^Enter::Run % "C:\windows\notepad.exe " . quoteWrap(clipGetSelection())
 
-; ------------------------------------------------------------------
+#If ""
+	. "" || WinActive("ahk_class Progman") || ""
+	. "" || WinActive("ahk_class WorkerW") && focusedControl() == "SysListView321" || ""
+	. "" || WinActive("ahk_class ExploreWClass") || ""
+	. "" || WinActive("ahk_class CabinetWClass") && focusedControl() == "DirectUIHWND2"
++^Enter::Run % "C:\windows\notepad.exe " . quoteWrap(explorerGetSelection())
+#If
 
-#IfWinActive ahk_class CabinetWClass
-^Enter::CtrlOpen()
-#IfWinActive
 
-#IfWinActive ahk_class Progman
-^Enter::CtrlOpen()
-#IfWinActive
 
-#IfWinActive ahk_class WorkerW
-^Enter::CtrlOpen()
-#IfWinActive
-
-; ------ Ctrl Open -------------------------------------------------
-
-CtrlOpen()
-{
-	IsClipEmpty := (Clipboard = "") ? 1 : 0
-	if !IsClipEmpty {
-		ClipboardBackup := Clipboard
-		While !(Clipboard = "") {
-			Clipboard =
-			Sleep, 10
-		}
-	}
-	Send, ^c
-	ClipWait, 0.1
-	Path := Clipboard, Clipboard := ClipboardBackup
-	if !IsClipEmpty
-	ClipWait, 0.5, 1
-	StringGetPos, Pos, Path, ., R
-	ext := SubStr(Path, Pos+2)
-	FileRead, FullINI, %MyIniPath%
-
-	Loop, Parse, FullINI,`r,`n
-	{
-		RegExMatch(A_LoopField, "\[(.*)]$",Section)
-		If (Section1 <> "")
-			Sections .= "|" Section1
-	}
-	StringTrimLeft, Sections, Sections, 1
-	StringSplit, Sections, Sections, |
-
-	Loop
-	{
-		CurSection := Sections%A_Index%
-		IniRead, ExtVar,  %MyIniPath%, %CurSection%, Extensions
-		IniRead, PathVar, %MyIniPath%, %CurSection%, Application
-		StringSplit, ExtArr, ExtVar, `,
-
-		Loop
-		{
-			if (ExtArr%A_Index% = ext)
-			{
-				Run, %PathVar% "%Path%"
-				Goto, ExitLoops
-			}
-		} Until A_Index = ExtArr0
-
-	} Until A_Index = Sections0
-
-	ExitLoops:
-	Return
+focusedControl() {
+	ControlGetFocus focused, A
+	return focused
 }
 
-EditIni:
-Run, C:\windows\notepad.exe %MyIniPath%
-Return
+clipGetSelection() {
+	clip0 := ClipboardAll
+	Clipboard := ""
+	while (Clipboard != "") {
+		Sleep, 10
+		Clipboard := ""
+	}
+	
+	Send ^c
+	ClipWait  0.3, 1
+	if (ErrorLevel || Clipboard == "") {
+		Clipboard := clip0
+		;could fail non-silently here too if we weren't confident there are no bugs :^)
+		;MsgBox % "Copying path of selected file(s) to clipboard failed."
+		exit 0
+	}
+
+	paths := Clipboard
+	Clipboard := clip0
+	return paths
+}
+
+;from https://stackoverflow.com/questions/49966688/autohotkey-copy-file-name-without-path-and-extension
+explorerGetSelection(hwnd="") {
+	WinGet, process, processName, % "ahk_id" hwnd := hwnd? hwnd:WinExist("A")
+	WinGetClass class, ahk_id %hwnd%
+	ToReturn := ""
+	if (process = "explorer.exe")
+		if (class ~= "Progman|WorkerW") {
+			ControlGet, files, List, Selected Col1, SysListView321, ahk_class %class%
+			Loop, Parse, files, `n, `r
+			ToReturn .= A_Desktop "\" A_LoopField "`n"
+	} else if (class ~= "(Cabinet|Explore)WClass") {
+		for window in ComObjCreate("Shell.Application").Windows
+			if (window.hwnd==hwnd)
+				sel := window.Document.SelectedItems
+		for item in sel
+			ToReturn .= item.path "`n"
+	}
+	if (ToReturn == "") {
+		;MsgBox % "Getting path of selected file(s) failed."
+		exit 0
+	}
+	return ToReturn
+}
+
+quoteWrap(linelist) {
+	return RegExReplace(RegExReplace(linelist,"`am)^.","""$0"),"`am).$","$0""")
+}

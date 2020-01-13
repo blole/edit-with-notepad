@@ -18,6 +18,11 @@ SetWorkingDir %A_ScriptDir%
 	. "" || WinActive("ahk_class ExploreWClass") || ""
 	. "" || WinActive("ahk_class CabinetWClass") && focusedControl() == "DirectUIHWND2"
 +^Enter::Run % "C:\windows\notepad.exe " . quoteWrap(explorerGetSelection())
+
+#If ""
+	. "" || WinActive("ahk_class WinRarWindow") && focusedControl() == "SysListView321" || ""
+	. "" || WinActive("ahk_exe 7zFM.exe") && focusedControl() == "SysListView321"
++^Enter::MsgBox % "not supported"
 #If
 
 
